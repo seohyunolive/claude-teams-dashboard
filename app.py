@@ -185,9 +185,42 @@ if load_method == "내장 데이터":
                 with st.spinner("데이터 로드 중..."):
                     st.session_state.data = load_data_cached(str(snapshot_path))
                     st.session_state.data_loaded = True
+                    st.session_state.current_snapshot = selected_snapshot
                 st.sidebar.success("✅ 로드 완료!")
             except Exception as e:
                 st.sidebar.error(f"❌ 로드 실패: {e}")
+
+        # 스냅샷 비교 옵션 (2개 이상일 때만)
+        if len(embedded_snapshots) >= 2:
+            st.sidebar.divider()
+            st.sidebar.markdown("### 📊 스냅샷 비교")
+
+            compare_snapshot = st.sidebar.selectbox(
+                "비교할 이전 스냅샷",
+                options=[s for s in embedded_snapshots if s != selected_snapshot],
+                key="embedded_compare_snapshot"
+            )
+
+            if st.sidebar.button("📈 비교 분석", key="embedded_compare_btn"):
+                try:
+                    with st.spinner("비교 분석 중..."):
+                        # 이전 스냅샷 로드
+                        prev_path = get_embedded_data_path() / compare_snapshot
+                        prev_data = load_data_cached(str(prev_path))
+
+                        # 현재 스냅샷 로드
+                        curr_path = get_embedded_data_path() / selected_snapshot
+                        curr_data = load_data_cached(str(curr_path))
+
+                        if prev_data and curr_data:
+                            st.session_state.comparison = SnapshotComparison(prev_data, curr_data)
+                            st.session_state.show_comparison = True
+                            st.session_state.data = curr_data
+                            st.session_state.data_loaded = True
+                            st.sidebar.success("✅ 비교 분석 준비 완료!")
+                            st.rerun()
+                except Exception as e:
+                    st.sidebar.error(f"❌ 비교 실패: {e}")
     else:
         st.sidebar.warning("내장 데이터가 없습니다. 파일 업로드를 이용하세요.")
 
