@@ -9,7 +9,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from data_loader import DataLoader, DashboardData, MultiSnapshotLoader, load_from_uploaded_files
+from data_loader import DataLoader, DashboardData
 from analytics import UsageAnalytics, SnapshotComparison
 from visualizations import DashboardCharts
 
@@ -105,7 +105,6 @@ st.markdown("""
 if 'data_loaded' not in st.session_state:
     st.session_state.data_loaded = False
     st.session_state.data = None
-    st.session_state.multi_snapshot = None
     st.session_state.snapshot_list = []
 
 
@@ -114,13 +113,6 @@ def load_data_cached(data_path: str) -> DashboardData:
     """캐시된 데이터 로드"""
     loader = DataLoader(data_path)
     return loader.load_all()
-
-
-def find_snapshots(base_path: str) -> list:
-    """스냅샷 폴더 목록 찾기"""
-    loader = MultiSnapshotLoader(base_path)
-    folders = loader.find_snapshot_folders()
-    return [f.name for f in folders]
 
 
 # ============================================================
@@ -159,149 +151,61 @@ if not st.session_state.data_loaded:
             pass
 
 # ============================================================
-# 사이드바: 데이터 로드
+# 사이드바: 스냅샷 선택
 # ============================================================
-st.sidebar.title("⚙️ 데이터 설정")
+st.sidebar.title("📁 스냅샷 선택")
 
-load_method = st.sidebar.radio(
-    "데이터 로드 방식",
-    ["내장 데이터", "파일 업로드", "로컬 폴더 지정"]
-)
+embedded_snapshots = find_embedded_snapshots()
 
-if load_method == "내장 데이터":
-    embedded_snapshots = find_embedded_snapshots()
-
-    if embedded_snapshots:
-        st.sidebar.markdown("### 📁 스냅샷 선택")
-        selected_snapshot = st.sidebar.selectbox(
-            "조회할 스냅샷",
-            options=embedded_snapshots,
-            help="날짜순으로 정렬됨 (최신순)"
-        )
-
-        if st.sidebar.button("📂 데이터 로드", type="primary"):
-            try:
-                snapshot_path = get_embedded_data_path() / selected_snapshot
-                with st.spinner("데이터 로드 중..."):
-                    st.session_state.data = load_data_cached(str(snapshot_path))
-                    st.session_state.data_loaded = True
-                    st.session_state.current_snapshot = selected_snapshot
-                st.sidebar.success("✅ 로드 완료!")
-            except Exception as e:
-                st.sidebar.error(f"❌ 로드 실패: {e}")
-
-        # 스냅샷 비교 옵션 (2개 이상일 때만)
-        if len(embedded_snapshots) >= 2:
-            st.sidebar.divider()
-            st.sidebar.markdown("### 📊 스냅샷 비교")
-
-            compare_snapshot = st.sidebar.selectbox(
-                "비교할 이전 스냅샷",
-                options=[s for s in embedded_snapshots if s != selected_snapshot],
-                key="embedded_compare_snapshot"
-            )
-
-            if st.sidebar.button("📈 비교 분석", key="embedded_compare_btn"):
-                try:
-                    with st.spinner("비교 분석 중..."):
-                        # 이전 스냅샷 로드
-                        prev_path = get_embedded_data_path() / compare_snapshot
-                        prev_data = load_data_cached(str(prev_path))
-
-                        # 현재 스냅샷 로드
-                        curr_path = get_embedded_data_path() / selected_snapshot
-                        curr_data = load_data_cached(str(curr_path))
-
-                        if prev_data and curr_data:
-                            st.session_state.comparison = SnapshotComparison(prev_data, curr_data)
-                            st.session_state.show_comparison = True
-                            st.session_state.data = curr_data
-                            st.session_state.data_loaded = True
-                            st.sidebar.success("✅ 비교 분석 준비 완료!")
-                            st.rerun()
-                except Exception as e:
-                    st.sidebar.error(f"❌ 비교 실패: {e}")
-    else:
-        st.sidebar.warning("내장 데이터가 없습니다. 파일 업로드를 이용하세요.")
-
-elif load_method == "로컬 폴더 지정":
-    default_base = r"C:\Users\user\Desktop\claude_manage_dash\logdata"
-    base_path = st.sidebar.text_input(
-        "스냅샷 상위 폴더",
-        value=default_base,
-        help="스냅샷 폴더들이 있는 상위 디렉토리"
+if embedded_snapshots:
+    selected_snapshot = st.sidebar.selectbox(
+        "조회할 스냅샷",
+        options=embedded_snapshots,
+        help="날짜순으로 정렬됨 (최신순)"
     )
 
-    if st.sidebar.button("🔍 스냅샷 검색", type="primary"):
-        with st.spinner("스냅샷 검색 중..."):
-            snapshots = find_snapshots(base_path)
-            if snapshots:
-                st.session_state.snapshot_list = snapshots
-                st.sidebar.success(f"✅ {len(snapshots)}개 스냅샷 발견!")
-            else:
-                st.sidebar.warning("스냅샷을 찾을 수 없습니다.")
+    if st.sidebar.button("📂 데이터 로드", type="primary"):
+        try:
+            snapshot_path = get_embedded_data_path() / selected_snapshot
+            with st.spinner("데이터 로드 중..."):
+                st.session_state.data = load_data_cached(str(snapshot_path))
+                st.session_state.data_loaded = True
+                st.session_state.current_snapshot = selected_snapshot
+            st.sidebar.success("✅ 로드 완료!")
+        except Exception as e:
+            st.sidebar.error(f"❌ 로드 실패: {e}")
 
-    # 스냅샷 선택
-    if st.session_state.snapshot_list:
-        st.sidebar.markdown("### 📁 스냅샷 선택")
-        selected_snapshot = st.sidebar.selectbox(
-            "조회할 스냅샷",
-            options=st.session_state.snapshot_list,
-            help="날짜순으로 정렬됨 (최신순)"
+    # 스냅샷 비교 옵션 (2개 이상일 때만)
+    if len(embedded_snapshots) >= 2:
+        st.sidebar.divider()
+        st.sidebar.markdown("### 📊 스냅샷 비교")
+
+        compare_snapshot = st.sidebar.selectbox(
+            "비교할 이전 스냅샷",
+            options=[s for s in embedded_snapshots if s != selected_snapshot],
+            key="compare_snapshot"
         )
 
-        if st.sidebar.button("📂 선택한 스냅샷 로드"):
+        if st.sidebar.button("📈 비교 분석"):
             try:
-                snapshot_path = Path(base_path) / selected_snapshot
-                with st.spinner("데이터 로드 중..."):
-                    st.session_state.data = load_data_cached(str(snapshot_path))
-                    st.session_state.data_loaded = True
-                st.sidebar.success("✅ 로드 완료!")
-            except Exception as e:
-                st.sidebar.error(f"❌ 로드 실패: {e}")
+                with st.spinner("비교 분석 중..."):
+                    prev_path = get_embedded_data_path() / compare_snapshot
+                    prev_data = load_data_cached(str(prev_path))
 
-        # 스냅샷 비교 옵션
-        if len(st.session_state.snapshot_list) >= 2:
-            st.sidebar.divider()
-            st.sidebar.markdown("### 📊 스냅샷 비교")
+                    curr_path = get_embedded_data_path() / selected_snapshot
+                    curr_data = load_data_cached(str(curr_path))
 
-            compare_snapshot = st.sidebar.selectbox(
-                "비교할 이전 스냅샷",
-                options=[s for s in st.session_state.snapshot_list if s != selected_snapshot],
-                key="compare_snapshot"
-            )
-
-            if st.sidebar.button("📈 비교 분석"):
-                try:
-                    with st.spinner("비교 분석 중..."):
-                        loader = MultiSnapshotLoader(base_path)
-                        data1 = loader.load_single_snapshot(compare_snapshot)
-                        data2 = loader.load_single_snapshot(selected_snapshot)
-                        if data1 and data2:
-                            st.session_state.comparison = SnapshotComparison(data1, data2)
-                            st.session_state.show_comparison = True
-                            st.sidebar.success("✅ 비교 분석 준비 완료!")
-                except Exception as e:
-                    st.sidebar.error(f"❌ 비교 실패: {e}")
-
-else:  # 파일 업로드
-    st.sidebar.markdown("### 파일 업로드")
-    users_file = st.sidebar.file_uploader("users.json", type=['json'], key='users')
-    conversations_file = st.sidebar.file_uploader("conversations.json", type=['json'], key='convs')
-
-    if users_file and conversations_file:
-        if st.sidebar.button("📤 데이터 로드", type="primary"):
-            try:
-                with st.spinner("데이터 로드 중..."):
-                    data = load_from_uploaded_files(users_file, conversations_file)
-                    if data:
-                        st.session_state.data = data
+                    if prev_data and curr_data:
+                        st.session_state.comparison = SnapshotComparison(prev_data, curr_data)
+                        st.session_state.show_comparison = True
+                        st.session_state.data = curr_data
                         st.session_state.data_loaded = True
-                        st.sidebar.success("✅ 데이터 로드 완료!")
-                    else:
-                        st.sidebar.error("❌ 파일 형식이 올바르지 않습니다.")
+                        st.sidebar.success("✅ 비교 분석 준비 완료!")
+                        st.rerun()
             except Exception as e:
-                st.sidebar.error(f"❌ 로드 실패: {e}")
+                st.sidebar.error(f"❌ 비교 실패: {e}")
+else:
+    st.sidebar.warning("데이터가 없습니다. 관리자에게 문의하세요.")
 
 # 데이터 로드 상태 표시
 if st.session_state.data_loaded:
@@ -321,17 +225,7 @@ if st.session_state.data_loaded:
 st.markdown('<p class="main-header">🤖 Claude Teams 관리자 대시보드</p>', unsafe_allow_html=True)
 
 if not st.session_state.data_loaded:
-    st.info("👈 사이드바에서 데이터를 로드해주세요.")
-
-    st.markdown("""
-    ### 사용 방법
-    1. **폴더 경로 지정**: JSON 파일들이 있는 폴더 경로를 입력하고 '데이터 로드' 클릭
-    2. **파일 업로드**: `users.json`과 `conversations.json` 파일을 직접 업로드
-
-    ### 필요한 파일
-    - `users.json`: 사용자 정보
-    - `conversations.json`: 대화 데이터
-    """)
+    st.info("👈 사이드바에서 스냅샷을 선택하고 '데이터 로드' 버튼을 클릭하세요.")
     st.stop()
 
 # 데이터 분석 객체 생성
