@@ -205,6 +205,60 @@ class MultiSnapshotLoader:
         return None
 
 
+def load_cumulative_data(base_path: str) -> Optional[DashboardData]:
+    """모든 스냅샷을 병합하여 누적 데이터 생성"""
+    loader = MultiSnapshotLoader(base_path)
+    folders = loader.find_snapshot_folders()
+
+    if not folders:
+        return None
+
+    all_users = []
+    all_conversations = []
+    all_messages = []
+
+    for folder in folders:
+        try:
+            data_loader = DataLoader(str(folder))
+            data = data_loader.load_all()
+
+            # 각 데이터프레임에 스냅샷 정보 추가
+            users_df = data.users.copy()
+            users_df['snapshot'] = folder.name
+            all_users.append(users_df)
+
+            convs_df = data.conversations.copy()
+            convs_df['snapshot'] = folder.name
+            all_conversations.append(convs_df)
+
+            msgs_df = data.messages.copy()
+            msgs_df['snapshot'] = folder.name
+            all_messages.append(msgs_df)
+        except Exception as e:
+            print(f"스냅샷 로드 실패 ({folder.name}): {e}")
+
+    if not all_users:
+        return None
+
+    # 병합
+    merged_users = pd.concat(all_users, ignore_index=True)
+    merged_conversations = pd.concat(all_conversations, ignore_index=True)
+    merged_messages = pd.concat(all_messages, ignore_index=True)
+
+    # 중복 제거 (uuid 기준으로 최신 스냅샷 데이터 유지)
+    merged_users = merged_users.drop_duplicates(subset=['user_uuid'], keep='first')
+    merged_conversations = merged_conversations.drop_duplicates(subset=['conv_uuid'], keep='first')
+    merged_messages = merged_messages.drop_duplicates(subset=['msg_uuid'], keep='first')
+
+    return DashboardData(
+        users=merged_users,
+        conversations=merged_conversations,
+        messages=merged_messages,
+        snapshot_name="전체 누적",
+        snapshot_date=None
+    )
+
+
 def load_from_uploaded_files(users_file, conversations_file) -> Optional[DashboardData]:
     """업로드된 파일에서 데이터 로드"""
     try:

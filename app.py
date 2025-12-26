@@ -9,7 +9,7 @@ import pandas as pd
 from datetime import datetime, timedelta
 from pathlib import Path
 
-from data_loader import DataLoader, DashboardData
+from data_loader import DataLoader, DashboardData, load_cumulative_data
 from analytics import UsageAnalytics, SnapshotComparison
 from visualizations import DashboardCharts
 
@@ -105,6 +105,11 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
+
+# ============================================================
+# 기능 플래그
+# ============================================================
+SHOW_CONVERSATION_TAB = False  # 대화 조회 탭 표시 여부 (개인정보 보호를 위해 기본값 False)
 
 # 세션 상태 초기화
 if 'data_loaded' not in st.session_state:
@@ -241,23 +246,26 @@ if not st.session_state.data_loaded:
 # 데이터 분석 객체 생성
 analytics = UsageAnalytics(st.session_state.data)
 
-# 탭 구성 - 비교 분석이 있으면 5개 탭, 아니면 4개 탭
+# 탭 구성 - 현황 / 사용 추이 / 사용자 상세 / 누적 현황 / 스냅샷 비교
+tab_names = ["📊 전체 현황", "📈 사용 추이"]
+if SHOW_CONVERSATION_TAB:
+    tab_names.append("💬 대화 조회")
+tab_names.append("👤 사용자 상세")
+tab_names.append("📚 누적 현황")
 if st.session_state.get('show_comparison') and st.session_state.get('comparison'):
-    tab1, tab2, tab3, tab4, tab5 = st.tabs([
-        "📊 전체 현황",
-        "📈 사용 추이",
-        "💬 대화 조회",
-        "👤 사용자 상세",
-        "🔄 스냅샷 비교"
-    ])
-else:
-    tab1, tab2, tab3, tab4 = st.tabs([
-        "📊 전체 현황",
-        "📈 사용 추이",
-        "💬 대화 조회",
-        "👤 사용자 상세"
-    ])
-    tab5 = None
+    tab_names.append("🔄 스냅샷 비교")
+
+tabs = st.tabs(tab_names)
+tab_idx = 0
+
+tab1 = tabs[tab_idx]; tab_idx += 1
+tab2 = tabs[tab_idx]; tab_idx += 1
+tab3 = tabs[tab_idx] if SHOW_CONVERSATION_TAB else None
+if SHOW_CONVERSATION_TAB:
+    tab_idx += 1
+tab4 = tabs[tab_idx]; tab_idx += 1
+tab_cumulative = tabs[tab_idx]; tab_idx += 1
+tab5 = tabs[tab_idx] if st.session_state.get('show_comparison') and st.session_state.get('comparison') else None
 
 
 # ============================================================
@@ -435,98 +443,99 @@ with tab2:
 
 
 # ============================================================
-# TAB 3: 대화 조회
+# TAB 3: 대화 조회 (SHOW_CONVERSATION_TAB=True일 때만 표시)
 # ============================================================
-with tab3:
-    st.header("대화 내용 조회/검색")
+if SHOW_CONVERSATION_TAB and tab3 is not None:
+    with tab3:
+        st.header("대화 내용 조회/검색")
 
-    # 검색 필터
-    col1, col2 = st.columns([2, 1])
+        # 검색 필터
+        col1, col2 = st.columns([2, 1])
 
-    with col1:
-        search_query = st.text_input(
-            "🔍 검색어",
-            placeholder="대화 내용에서 검색할 키워드를 입력하세요"
-        )
+        with col1:
+            search_query = st.text_input(
+                "🔍 검색어",
+                placeholder="대화 내용에서 검색할 키워드를 입력하세요"
+            )
 
-    with col2:
-        user_options = ['전체'] + analytics.users['full_name'].tolist()
-        user_filter = st.selectbox(
-            "사용자 필터",
-            options=user_options
-        )
+        with col2:
+            user_options = ['전체'] + analytics.users['full_name'].tolist()
+            user_filter = st.selectbox(
+                "사용자 필터",
+                options=user_options
+            )
 
-    st.divider()
+        st.divider()
 
-    # 검색 실행
-    if search_query:
-        user_uuid = None
-        if user_filter != '전체':
-            user_uuid = analytics.users[
-                analytics.users['full_name'] == user_filter
-            ]['user_uuid'].iloc[0]
+        # 검색 실행
+        if search_query:
+            user_uuid = None
+            if user_filter != '전체':
+                user_uuid = analytics.users[
+                    analytics.users['full_name'] == user_filter
+                ]['user_uuid'].iloc[0]
 
-        results = analytics.search_conversations(search_query, user_uuid)
+            results = analytics.search_conversations(search_query, user_uuid)
 
-        st.write(f"**검색 결과: {len(results)}건**")
+            st.write(f"**검색 결과: {len(results)}건**")
 
-        if len(results) > 0:
-            for idx, row in results.head(50).iterrows():
-                sender_label = '👤 사용자' if row['sender'] == 'human' else '🤖 Claude'
-                time_str = row['created_at'].strftime('%Y-%m-%d %H:%M')
+            if len(results) > 0:
+                for idx, row in results.head(50).iterrows():
+                    sender_label = '👤 사용자' if row['sender'] == 'human' else '🤖 Claude'
+                    time_str = row['created_at'].strftime('%Y-%m-%d %H:%M')
 
-                with st.expander(f"{row['full_name']} | {sender_label} | {time_str}"):
-                    st.markdown(f"**발신자**: {sender_label}")
-                    st.markdown(f"**시간**: {time_str}")
-                    st.divider()
+                    with st.expander(f"{row['full_name']} | {sender_label} | {time_str}"):
+                        st.markdown(f"**발신자**: {sender_label}")
+                        st.markdown(f"**시간**: {time_str}")
+                        st.divider()
 
-                    # 텍스트 미리보기 (긴 경우 자르기)
-                    text = row['text']
-                    if len(text) > 1000:
-                        st.markdown(text[:1000] + "...")
-                        if st.button(f"전체 보기 ({len(text)}자)", key=f"full_{idx}"):
-                            st.markdown(text)
-                    else:
-                        st.markdown(text if text else "(내용 없음)")
+                        # 텍스트 미리보기 (긴 경우 자르기)
+                        text = row['text']
+                        if len(text) > 1000:
+                            st.markdown(text[:1000] + "...")
+                            if st.button(f"전체 보기 ({len(text)}자)", key=f"full_{idx}"):
+                                st.markdown(text)
+                        else:
+                            st.markdown(text if text else "(내용 없음)")
+            else:
+                st.info("검색 결과가 없습니다.")
+
         else:
-            st.info("검색 결과가 없습니다.")
+            # 최근 대화 목록
+            st.subheader("최근 대화 목록")
 
-    else:
-        # 최근 대화 목록
-        st.subheader("최근 대화 목록")
+            recent_convs = analytics.conversations.sort_values('updated_at', ascending=False).head(20)
+            recent_convs = recent_convs.merge(
+                analytics.users[['user_uuid', 'full_name']],
+                on='user_uuid',
+                how='left'
+            )
 
-        recent_convs = analytics.conversations.sort_values('updated_at', ascending=False).head(20)
-        recent_convs = recent_convs.merge(
-            analytics.users[['user_uuid', 'full_name']],
-            on='user_uuid',
-            how='left'
-        )
+            for _, conv in recent_convs.iterrows():
+                col1, col2, col3 = st.columns([3, 1, 1])
 
-        for _, conv in recent_convs.iterrows():
-            col1, col2, col3 = st.columns([3, 1, 1])
+                with col1:
+                    conv_name = conv['name'] if conv['name'] else '(제목 없음)'
+                    st.write(f"**{conv_name}**")
+                    st.caption(f"👤 {conv['full_name']}")
 
-            with col1:
-                conv_name = conv['name'] if conv['name'] else '(제목 없음)'
-                st.write(f"**{conv_name}**")
-                st.caption(f"👤 {conv['full_name']}")
+                with col2:
+                    st.write(f"💬 {conv['message_count']}개")
 
-            with col2:
-                st.write(f"💬 {conv['message_count']}개")
+                with col3:
+                    st.caption(conv['updated_at'].strftime('%Y-%m-%d'))
 
-            with col3:
-                st.caption(conv['updated_at'].strftime('%Y-%m-%d'))
+                # 대화 상세 보기
+                with st.expander("대화 내용 보기"):
+                    msgs = analytics.get_conversation_messages(conv['conv_uuid'])
+                    for _, msg in msgs.iterrows():
+                        sender_icon = '👤' if msg['sender'] == 'human' else '🤖'
+                        st.markdown(f"**{sender_icon} {msg['sender']}** ({msg['created_at'].strftime('%H:%M')})")
+                        text = msg['text'][:500] + "..." if len(msg['text']) > 500 else msg['text']
+                        st.markdown(text if text else "(내용 없음)")
+                        st.divider()
 
-            # 대화 상세 보기
-            with st.expander("대화 내용 보기"):
-                msgs = analytics.get_conversation_messages(conv['conv_uuid'])
-                for _, msg in msgs.iterrows():
-                    sender_icon = '👤' if msg['sender'] == 'human' else '🤖'
-                    st.markdown(f"**{sender_icon} {msg['sender']}** ({msg['created_at'].strftime('%H:%M')})")
-                    text = msg['text'][:500] + "..." if len(msg['text']) > 500 else msg['text']
-                    st.markdown(text if text else "(내용 없음)")
-                    st.divider()
-
-            st.divider()
+                st.divider()
 
 
 # ============================================================
@@ -613,6 +622,211 @@ with tab4:
             )
         else:
             st.info("대화 내역이 없습니다.")
+
+
+# ============================================================
+# TAB: 누적 현황
+# ============================================================
+with tab_cumulative:
+    st.header("전체 누적 현황")
+
+    # 누적 데이터 로드 (캐시 사용)
+    @st.cache_data(ttl=3600)
+    def get_cumulative_data():
+        return load_cumulative_data(str(get_embedded_data_path()))
+
+    cumulative_data = get_cumulative_data()
+
+    if cumulative_data is None:
+        st.warning("누적 데이터를 로드할 수 없습니다.")
+    else:
+        cumulative_analytics = UsageAnalytics(cumulative_data)
+
+        # 조회 기간 및 집계 단위 설정
+        st.subheader("조회 설정")
+        col1, col2 = st.columns(2)
+
+        with col1:
+            cumulative_stats = cumulative_analytics.get_overall_stats()
+            date_range = cumulative_stats['date_range']
+            min_date = date_range['start'].date() if date_range['start'] else datetime.now().date() - timedelta(days=365)
+            max_date = date_range['end'].date() if date_range['end'] else datetime.now().date()
+
+            cumulative_date_range = st.date_input(
+                "조회 기간",
+                value=(min_date, max_date),
+                min_value=min_date,
+                max_value=max_date,
+                help="시작일과 종료일을 선택하세요",
+                key="cumulative_date_range"
+            )
+
+        with col2:
+            cumulative_view_type = st.selectbox(
+                "집계 단위",
+                ["일별", "주별", "월별"],
+                key="cumulative_view_type"
+            )
+
+        st.divider()
+
+        # KPI 메트릭 (전체 누적)
+        st.subheader("전체 누적 통계")
+        col1, col2, col3, col4 = st.columns(4)
+
+        with col1:
+            st.metric(
+                label="총 사용자",
+                value=f"{cumulative_stats['total_users']}명"
+            )
+
+        with col2:
+            st.metric(
+                label="총 대화 수",
+                value=f"{cumulative_stats['total_conversations']}개"
+            )
+
+        with col3:
+            st.metric(
+                label="총 메시지 수",
+                value=f"{cumulative_stats['total_messages']:,}개"
+            )
+
+        with col4:
+            avg_msgs = cumulative_stats['avg_messages_per_user']
+            st.metric(
+                label="평균 메시지/사용자",
+                value=f"{avg_msgs:.1f}개"
+            )
+
+        st.divider()
+
+        # 기간별 사용량 추이
+        st.subheader("기간별 사용량 추이")
+
+        if cumulative_view_type == "일별":
+            daily_df = cumulative_analytics.get_daily_usage()
+
+            if len(daily_df) > 0:
+                # 선택 기간 필터링
+                if len(cumulative_date_range) == 2:
+                    start, end = cumulative_date_range
+                    daily_df = daily_df[
+                        (daily_df['date'] >= start) &
+                        (daily_df['date'] <= end)
+                    ]
+
+                fig_trend = DashboardCharts.daily_trend_line(daily_df)
+                st.plotly_chart(fig_trend, use_container_width=True)
+
+                with st.expander("📋 상세 데이터 보기"):
+                    st.dataframe(
+                        daily_df.rename(columns={
+                            'date': '날짜',
+                            'messages': '메시지 수',
+                            'active_users': '활성 사용자'
+                        }),
+                        use_container_width=True,
+                        hide_index=True
+                    )
+            else:
+                st.warning("표시할 데이터가 없습니다.")
+
+        elif cumulative_view_type == "주별":
+            weekly_df = cumulative_analytics.get_weekly_usage()
+
+            if len(weekly_df) > 0:
+                fig_weekly = DashboardCharts.weekly_bar_chart(weekly_df)
+                st.plotly_chart(fig_weekly, use_container_width=True)
+
+                with st.expander("📋 상세 데이터 보기"):
+                    st.dataframe(
+                        weekly_df.rename(columns={
+                            'year': '연도',
+                            'week': '주차',
+                            'messages': '메시지 수',
+                            'active_users': '활성 사용자'
+                        }),
+                        use_container_width=True,
+                        hide_index=True
+                    )
+            else:
+                st.warning("표시할 데이터가 없습니다.")
+
+        else:  # 월별
+            # 월별 집계
+            messages_df = cumulative_analytics.messages.copy()
+            if len(messages_df) > 0:
+                messages_df['month'] = messages_df['created_at'].dt.to_period('M')
+                monthly_df = messages_df.groupby('month').agg(
+                    messages=('msg_uuid', 'count'),
+                    active_users=('user_uuid', 'nunique')
+                ).reset_index()
+                monthly_df['month'] = monthly_df['month'].astype(str)
+
+                # 월별 차트
+                import plotly.express as px
+                fig_monthly = px.bar(
+                    monthly_df,
+                    x='month',
+                    y='messages',
+                    title='월별 메시지 수',
+                    labels={'month': '월', 'messages': '메시지 수'}
+                )
+                fig_monthly.update_layout(xaxis_tickangle=-45)
+                st.plotly_chart(fig_monthly, use_container_width=True)
+
+                with st.expander("📋 상세 데이터 보기"):
+                    st.dataframe(
+                        monthly_df.rename(columns={
+                            'month': '월',
+                            'messages': '메시지 수',
+                            'active_users': '활성 사용자'
+                        }),
+                        use_container_width=True,
+                        hide_index=True
+                    )
+            else:
+                st.warning("표시할 데이터가 없습니다.")
+
+        st.divider()
+
+        # 사용자별 누적 현황
+        st.subheader("사용자별 누적 현황")
+        cumulative_user_summary = cumulative_analytics.get_user_summary()
+
+        # 표시할 컬럼 설정
+        display_df = cumulative_user_summary.copy()
+        column_config = {
+            'full_name': '이름',
+            'email_address': '이메일',
+            'total_conversations': '대화 수',
+            'total_messages': '총 메시지'
+        }
+
+        display_cols = ['full_name', 'email_address', 'total_conversations', 'total_messages']
+
+        if 'human' in display_df.columns:
+            display_cols.append('human')
+            column_config['human'] = '사용자 메시지'
+        if 'assistant' in display_df.columns:
+            display_cols.append('assistant')
+            column_config['assistant'] = 'Claude 응답'
+
+        st.dataframe(
+            display_df[display_cols].rename(columns=column_config),
+            use_container_width=True,
+            hide_index=True
+        )
+
+        # CSV 다운로드
+        csv = display_df[display_cols].to_csv(index=False).encode('utf-8-sig')
+        st.download_button(
+            label="📥 누적 데이터 CSV 다운로드",
+            data=csv,
+            file_name="claude_teams_cumulative_usage.csv",
+            mime="text/csv"
+        )
 
 
 # ============================================================
