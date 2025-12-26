@@ -604,24 +604,24 @@ with tab4:
             )
             st.plotly_chart(fig_msg_type, use_container_width=True)
 
-        # 사용자의 대화 목록
-        st.subheader("대화 목록")
-
-        if user_detail['conversations']:
-            conv_df = pd.DataFrame(user_detail['conversations'])
-
-            st.dataframe(
-                conv_df[['name', 'message_count', 'created_at', 'updated_at']].rename(columns={
-                    'name': '대화 제목',
-                    'message_count': '메시지 수',
-                    'created_at': '생성일',
-                    'updated_at': '최근 활동'
-                }),
-                use_container_width=True,
-                hide_index=True
-            )
-        else:
-            st.info("대화 내역이 없습니다.")
+        # 사용자의 대화 목록 (개인정보 보호를 위해 숨김 처리)
+        # st.subheader("대화 목록")
+        #
+        # if user_detail['conversations']:
+        #     conv_df = pd.DataFrame(user_detail['conversations'])
+        #
+        #     st.dataframe(
+        #         conv_df[['name', 'message_count', 'created_at', 'updated_at']].rename(columns={
+        #             'name': '대화 제목',
+        #             'message_count': '메시지 수',
+        #             'created_at': '생성일',
+        #             'updated_at': '최근 활동'
+        #         }),
+        #         use_container_width=True,
+        #         hide_index=True
+        #     )
+        # else:
+        #     st.info("대화 내역이 없습니다.")
 
 
 # ============================================================
