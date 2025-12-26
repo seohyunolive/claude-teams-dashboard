@@ -81,21 +81,26 @@ if not check_password():
 st.markdown("""
 <style>
     .main-header {
-        font-size: 2.5rem;
+        font-size: 2rem;
         font-weight: bold;
         color: #1f77b4;
-        margin-bottom: 1rem;
-    }
-    .metric-container {
-        background-color: #f8f9fa;
-        border-radius: 10px;
-        padding: 1rem;
-        text-align: center;
+        margin-bottom: 0.5rem;
     }
     .stMetric {
         background-color: #f0f2f6;
-        padding: 1rem;
+        padding: 0.75rem;
         border-radius: 8px;
+    }
+    /* 사이드바 metric 크기 조정 */
+    [data-testid="stSidebar"] [data-testid="stMetricValue"] {
+        font-size: 1.2rem;
+    }
+    [data-testid="stSidebar"] [data-testid="stMetricLabel"] {
+        font-size: 0.75rem;
+    }
+    /* 사이드바 여백 조정 */
+    [data-testid="stSidebar"] .stSelectbox {
+        margin-bottom: 0.5rem;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -153,57 +158,63 @@ if not st.session_state.data_loaded:
 # ============================================================
 # 사이드바: 스냅샷 선택
 # ============================================================
-st.sidebar.title("📁 스냅샷 선택")
+st.sidebar.title("📊 대시보드")
 
 embedded_snapshots = find_embedded_snapshots()
 
 if embedded_snapshots:
+    # 현재 선택된 스냅샷 추적
+    if 'current_snapshot' not in st.session_state:
+        st.session_state.current_snapshot = embedded_snapshots[0]
+
     selected_snapshot = st.sidebar.selectbox(
-        "조회할 스냅샷",
+        "📁 스냅샷",
         options=embedded_snapshots,
+        index=embedded_snapshots.index(st.session_state.current_snapshot) if st.session_state.current_snapshot in embedded_snapshots else 0,
         help="날짜순으로 정렬됨 (최신순)"
     )
 
-    if st.sidebar.button("📂 데이터 로드", type="primary"):
+    # 스냅샷 변경 시 자동 로드
+    if selected_snapshot != st.session_state.get('current_snapshot'):
         try:
             snapshot_path = get_embedded_data_path() / selected_snapshot
-            with st.spinner("데이터 로드 중..."):
-                st.session_state.data = load_data_cached(str(snapshot_path))
-                st.session_state.data_loaded = True
-                st.session_state.current_snapshot = selected_snapshot
-            st.sidebar.success("✅ 로드 완료!")
+            st.session_state.data = load_data_cached(str(snapshot_path))
+            st.session_state.data_loaded = True
+            st.session_state.current_snapshot = selected_snapshot
+            st.session_state.show_comparison = False  # 비교 모드 초기화
+            st.rerun()
         except Exception as e:
-            st.sidebar.error(f"❌ 로드 실패: {e}")
+            st.sidebar.error(f"로드 실패: {e}")
 
     # 스냅샷 비교 옵션 (2개 이상일 때만)
     if len(embedded_snapshots) >= 2:
         st.sidebar.divider()
-        st.sidebar.markdown("### 📊 스냅샷 비교")
 
-        compare_snapshot = st.sidebar.selectbox(
-            "비교할 이전 스냅샷",
-            options=[s for s in embedded_snapshots if s != selected_snapshot],
-            key="compare_snapshot"
-        )
+        with st.sidebar.expander("🔄 스냅샷 비교", expanded=False):
+            compare_snapshot = st.selectbox(
+                "비교 대상",
+                options=[s for s in embedded_snapshots if s != selected_snapshot],
+                key="compare_snapshot",
+                help="현재 스냅샷과 비교할 이전 스냅샷"
+            )
 
-        if st.sidebar.button("📈 비교 분석"):
-            try:
-                with st.spinner("비교 분석 중..."):
-                    prev_path = get_embedded_data_path() / compare_snapshot
-                    prev_data = load_data_cached(str(prev_path))
+            if st.button("비교 분석 실행", type="primary", use_container_width=True):
+                try:
+                    with st.spinner("분석 중..."):
+                        prev_path = get_embedded_data_path() / compare_snapshot
+                        prev_data = load_data_cached(str(prev_path))
 
-                    curr_path = get_embedded_data_path() / selected_snapshot
-                    curr_data = load_data_cached(str(curr_path))
+                        curr_path = get_embedded_data_path() / selected_snapshot
+                        curr_data = load_data_cached(str(curr_path))
 
-                    if prev_data and curr_data:
-                        st.session_state.comparison = SnapshotComparison(prev_data, curr_data)
-                        st.session_state.show_comparison = True
-                        st.session_state.data = curr_data
-                        st.session_state.data_loaded = True
-                        st.sidebar.success("✅ 비교 분석 준비 완료!")
-                        st.rerun()
-            except Exception as e:
-                st.sidebar.error(f"❌ 비교 실패: {e}")
+                        if prev_data and curr_data:
+                            st.session_state.comparison = SnapshotComparison(prev_data, curr_data)
+                            st.session_state.show_comparison = True
+                            st.session_state.data = curr_data
+                            st.session_state.data_loaded = True
+                            st.rerun()
+                except Exception as e:
+                    st.error(f"비교 실패: {e}")
 else:
     st.sidebar.warning("데이터가 없습니다. 관리자에게 문의하세요.")
 
@@ -211,12 +222,11 @@ else:
 if st.session_state.data_loaded:
     data = st.session_state.data
     st.sidebar.divider()
-    st.sidebar.markdown("### 📊 로드된 데이터")
-    if data.snapshot_name:
-        st.sidebar.write(f"📁 **{data.snapshot_name}**")
-    st.sidebar.write(f"- 사용자: {len(data.users)}명")
-    st.sidebar.write(f"- 대화: {len(data.conversations)}개")
-    st.sidebar.write(f"- 메시지: {len(data.messages)}개")
+    st.sidebar.caption("현재 데이터")
+    col1, col2, col3 = st.sidebar.columns(3)
+    col1.metric("사용자", f"{len(data.users)}")
+    col2.metric("대화", f"{len(data.conversations)}")
+    col3.metric("메시지", f"{len(data.messages)}")
 
 
 # ============================================================
@@ -225,7 +235,7 @@ if st.session_state.data_loaded:
 st.markdown('<p class="main-header">🤖 Claude Teams 관리자 대시보드</p>', unsafe_allow_html=True)
 
 if not st.session_state.data_loaded:
-    st.info("👈 사이드바에서 스냅샷을 선택하고 '데이터 로드' 버튼을 클릭하세요.")
+    st.info("👈 사이드바에서 스냅샷을 선택하세요.")
     st.stop()
 
 # 데이터 분석 객체 생성
