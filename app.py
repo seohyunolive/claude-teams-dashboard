@@ -124,21 +124,79 @@ def find_snapshots(base_path: str) -> list:
 
 
 # ============================================================
+# 내장 데이터 자동 로드 (GitHub/Streamlit Cloud용)
+# ============================================================
+def get_embedded_data_path():
+    """내장 데이터 경로 반환 (앱과 같은 폴더의 data 디렉토리)"""
+    return Path(__file__).parent / "data"
+
+def find_embedded_snapshots():
+    """내장 데이터에서 스냅샷 폴더 찾기"""
+    data_path = get_embedded_data_path()
+    if not data_path.exists():
+        return []
+
+    snapshots = []
+    for folder in data_path.iterdir():
+        if folder.is_dir():
+            if (folder / "users.json").exists() and (folder / "conversations.json").exists():
+                snapshots.append(folder.name)
+
+    return sorted(snapshots, reverse=True)
+
+# 시작 시 내장 데이터 자동 로드
+if not st.session_state.data_loaded:
+    embedded_snapshots = find_embedded_snapshots()
+    if embedded_snapshots:
+        st.session_state.snapshot_list = embedded_snapshots
+        # 최신 스냅샷 자동 로드
+        latest_snapshot = embedded_snapshots[0]
+        try:
+            snapshot_path = get_embedded_data_path() / latest_snapshot
+            st.session_state.data = load_data_cached(str(snapshot_path))
+            st.session_state.data_loaded = True
+        except Exception:
+            pass
+
+# ============================================================
 # 사이드바: 데이터 로드
 # ============================================================
 st.sidebar.title("⚙️ 데이터 설정")
 
 load_method = st.sidebar.radio(
     "데이터 로드 방식",
-    ["다중 스냅샷 (폴더 자동 검색)", "단일 폴더 지정", "파일 업로드"]
+    ["내장 데이터", "파일 업로드", "로컬 폴더 지정"]
 )
 
-if load_method == "다중 스냅샷 (폴더 자동 검색)":
+if load_method == "내장 데이터":
+    embedded_snapshots = find_embedded_snapshots()
+
+    if embedded_snapshots:
+        st.sidebar.markdown("### 📁 스냅샷 선택")
+        selected_snapshot = st.sidebar.selectbox(
+            "조회할 스냅샷",
+            options=embedded_snapshots,
+            help="날짜순으로 정렬됨 (최신순)"
+        )
+
+        if st.sidebar.button("📂 데이터 로드", type="primary"):
+            try:
+                snapshot_path = get_embedded_data_path() / selected_snapshot
+                with st.spinner("데이터 로드 중..."):
+                    st.session_state.data = load_data_cached(str(snapshot_path))
+                    st.session_state.data_loaded = True
+                st.sidebar.success("✅ 로드 완료!")
+            except Exception as e:
+                st.sidebar.error(f"❌ 로드 실패: {e}")
+    else:
+        st.sidebar.warning("내장 데이터가 없습니다. 파일 업로드를 이용하세요.")
+
+elif load_method == "로컬 폴더 지정":
     default_base = r"C:\Users\user\Desktop\claude_manage_dash\logdata"
     base_path = st.sidebar.text_input(
         "스냅샷 상위 폴더",
         value=default_base,
-        help="data-YYYY-MM-DD 형식의 폴더들이 있는 상위 디렉토리"
+        help="스냅샷 폴더들이 있는 상위 디렉토리"
     )
 
     if st.sidebar.button("🔍 스냅샷 검색", type="primary"):
@@ -192,25 +250,6 @@ if load_method == "다중 스냅샷 (폴더 자동 검색)":
                             st.sidebar.success("✅ 비교 분석 준비 완료!")
                 except Exception as e:
                     st.sidebar.error(f"❌ 비교 실패: {e}")
-
-elif load_method == "단일 폴더 지정":
-    default_path = r"C:\Users\user\Desktop\claude_manage_dash\logdata"
-    data_path = st.sidebar.text_input(
-        "데이터 폴더 경로",
-        value=default_path,
-        help="users.json, conversations.json 등이 있는 폴더 경로"
-    )
-
-    if st.sidebar.button("📂 데이터 로드", type="primary"):
-        try:
-            with st.spinner("데이터 로드 중..."):
-                st.session_state.data = load_data_cached(data_path)
-                st.session_state.data_loaded = True
-            st.sidebar.success("✅ 데이터 로드 완료!")
-        except FileNotFoundError as e:
-            st.sidebar.error(f"❌ 파일을 찾을 수 없습니다: {e}")
-        except Exception as e:
-            st.sidebar.error(f"❌ 로드 실패: {e}")
 
 else:  # 파일 업로드
     st.sidebar.markdown("### 파일 업로드")
