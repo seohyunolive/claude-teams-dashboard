@@ -717,9 +717,9 @@ with tab_cumulative:
                     ]
 
                 fig_trend = DashboardCharts.daily_trend_line(daily_df)
-                st.plotly_chart(fig_trend, use_container_width=True)
+                st.plotly_chart(fig_trend, use_container_width=True, key="cumulative_daily_chart")
 
-                with st.expander("📋 상세 데이터 보기"):
+                with st.expander("📋 상세 데이터 보기", expanded=False):
                     st.dataframe(
                         daily_df.rename(columns={
                             'date': '날짜',
@@ -727,7 +727,8 @@ with tab_cumulative:
                             'active_users': '활성 사용자'
                         }),
                         use_container_width=True,
-                        hide_index=True
+                        hide_index=True,
+                        key="cumulative_daily_df"
                     )
             else:
                 st.warning("표시할 데이터가 없습니다.")
@@ -737,9 +738,9 @@ with tab_cumulative:
 
             if len(weekly_df) > 0:
                 fig_weekly = DashboardCharts.weekly_bar_chart(weekly_df)
-                st.plotly_chart(fig_weekly, use_container_width=True)
+                st.plotly_chart(fig_weekly, use_container_width=True, key="cumulative_weekly_chart")
 
-                with st.expander("📋 상세 데이터 보기"):
+                with st.expander("📋 상세 데이터 보기", expanded=False):
                     st.dataframe(
                         weekly_df.rename(columns={
                             'year': '연도',
@@ -748,7 +749,8 @@ with tab_cumulative:
                             'active_users': '활성 사용자'
                         }),
                         use_container_width=True,
-                        hide_index=True
+                        hide_index=True,
+                        key="cumulative_weekly_df"
                     )
             else:
                 st.warning("표시할 데이터가 없습니다.")
@@ -774,9 +776,9 @@ with tab_cumulative:
                     labels={'month': '월', 'messages': '메시지 수'}
                 )
                 fig_monthly.update_layout(xaxis_tickangle=-45)
-                st.plotly_chart(fig_monthly, use_container_width=True)
+                st.plotly_chart(fig_monthly, use_container_width=True, key="cumulative_monthly_chart")
 
-                with st.expander("📋 상세 데이터 보기"):
+                with st.expander("📋 상세 데이터 보기", expanded=False):
                     st.dataframe(
                         monthly_df.rename(columns={
                             'month': '월',
@@ -784,7 +786,8 @@ with tab_cumulative:
                             'active_users': '활성 사용자'
                         }),
                         use_container_width=True,
-                        hide_index=True
+                        hide_index=True,
+                        key="cumulative_monthly_df"
                     )
             else:
                 st.warning("표시할 데이터가 없습니다.")
@@ -816,7 +819,8 @@ with tab_cumulative:
         st.dataframe(
             display_df[display_cols].rename(columns=column_config),
             use_container_width=True,
-            hide_index=True
+            hide_index=True,
+            key="cumulative_user_summary_df"
         )
 
         # CSV 다운로드
@@ -825,7 +829,8 @@ with tab_cumulative:
             label="📥 누적 데이터 CSV 다운로드",
             data=csv,
             file_name="claude_teams_cumulative_usage.csv",
-            mime="text/csv"
+            mime="text/csv",
+            key="cumulative_csv_download"
         )
 
 
